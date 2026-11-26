@@ -5,6 +5,7 @@ agents: ["*"]
 version: 1.0.0
 ---
 
+# Initialize the codebase
 
 Please analyze this codebase and create an `AGENTS.md` file, which will be given to future instances of this AI coding agent (like Claude Code, Codex or Gemini Cli) a simple set of rules to operate in this project.
 
@@ -35,4 +36,4 @@ Best practices:
 * Avoid vague guidance. Write rules like clear internal docs
 * Reuse rules when repeating prompts in chat
 
-After the creation of this file, run the command `/setup-matt-pocock-skills` to create the initial domain and tracker file
+After the creation of this file, run the command `/setup-matt-pocock-skills`, if available, to create the initial domain and tracker file

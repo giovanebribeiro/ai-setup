@@ -1,71 +1,68 @@
 #!/usr/bin/env bash
-# install.sh — symlink tracked claude-setup files into ~/.claude/
+# install.sh — symlink tracked ai-setup files into harness config directories
 #
-# Usage: bash install.sh [--claude-dir <path>]
-#   --claude-dir  Target directory (default: ~/.claude)
+# Usage: bash install.sh --claude [--claude-dir <path>]
+#        bash install.sh --cursor [--cursor-dir <path>]
+#        bash install.sh --opencode [--opencode-dir <path>]
+#        bash install.sh --claude --cursor --opencode  (multiple at once)
+#
+# At least one harness flag is required.
 #
 # Each tracked item is symlinked from the repo into the target dir.
 # Anything already there that is NOT already our symlink gets backed up
-# to ~/.claude-setup-backup/<timestamp>/ before being replaced.
+# to ~/.ai-setup-backup/<timestamp>/ before being replaced.
 #
 # "Merge dirs" (e.g. skills/) are handled entry-by-entry so that
-# pre-existing content in the target directory (e.g. Pocock skills)
-# is preserved alongside repo content.
+# pre-existing content in the target directory is preserved alongside repo content.
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="${HOME}/.claude"
+CURSOR_DIR="${HOME}/.cursor"
+OPENCODE_DIR="${HOME}/.opencode"
+
+INSTALL_CLAUDE=false
+INSTALL_CURSOR=false
+INSTALL_OPENCODE=false
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: bash install.sh [--claude] [--cursor] [--opencode]" >&2
+    echo "       [--claude-dir <path>] [--cursor-dir <path>] [--opencode-dir <path>]" >&2
+    echo "" >&2
+    echo "At least one harness flag is required." >&2
+    exit 1
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --claude-dir) CLAUDE_DIR="$2"; shift 2 ;;
+        --claude)       INSTALL_CLAUDE=true; shift ;;
+        --cursor)       INSTALL_CURSOR=true; shift ;;
+        --opencode)     INSTALL_OPENCODE=true; shift ;;
+        --claude-dir)   CLAUDE_DIR="$2"; shift 2 ;;
+        --cursor-dir)   CURSOR_DIR="$2"; shift 2 ;;
+        --opencode-dir) OPENCODE_DIR="$2"; shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
 
-BACKUP_DIR="${HOME}/.claude-setup-backup/$(date +%Y%m%d-%H%M%S)"
+if ! $INSTALL_CLAUDE && ! $INSTALL_CURSOR && ! $INSTALL_OPENCODE; then
+    echo "Error: at least one of --claude, --cursor, --opencode is required." >&2
+    exit 1
+fi
 
-# Items symlinked directly into $CLAUDE_DIR.
-# Keep in sync with what git tracks.
-DIRECT_LINKS=(
-    CLAUDE.md
-    README.md
-    agents
-    commands
-    contexts
-    rules
-    scripts
-    settings.json
-    notes
-)
+BACKUP_DIR="${HOME}/.ai-setup-backup/$(date +%Y%m%d-%H%M%S)"
 
-# Directories whose *contents* are symlinked individually into $CLAUDE_DIR/<dir>/.
-# This preserves any pre-existing entries (e.g. Pocock skills installed by Claude Code)
-# alongside repo-tracked entries.
-MERGE_DIRS=(
-    skills
-)
-
-echo "Repo:   $REPO_DIR"
-echo "Target: $CLAUDE_DIR"
-echo ""
-
-mkdir -p "$CLAUDE_DIR"
-
-# Link one item (source path -> target path), backing up any conflicting entry.
 link_item() {
     local source="$1"
     local target="$2"
     local label="$3"
 
-    # Already the correct symlink — nothing to do.
     if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
         echo "  ok    $label"
         return
     fi
 
-    # Exists but is not our symlink — back up before replacing.
     if [[ -e "$target" || -L "$target" ]]; then
         mkdir -p "$BACKUP_DIR"
         mv "$target" "$BACKUP_DIR/$(basename "$target")"
@@ -76,51 +73,66 @@ link_item() {
     echo "  link  $label"
 }
 
-# --- Direct symlinks ---
-for item in "${DIRECT_LINKS[@]}"; do
-    source="$REPO_DIR/$item"
-    target="$CLAUDE_DIR/$item"
-
-    if [[ ! -e "$source" ]]; then
-        echo "  skip  $item  (not found in repo)"
-        continue
-    fi
-
-    link_item "$source" "$target" "$item"
-done
-
-# --- Merge-dir symlinks (entry-by-entry) ---
-for dir in "${MERGE_DIRS[@]}"; do
-    source_dir="$REPO_DIR/$dir"
+# Symlink each entry in source_dir individually (preserves pre-existing content in target_dir).
+link_merge_dir() {
+    local source_dir="$1"
+    local target_dir="$2"
+    local label_prefix="$3"
 
     if [[ ! -d "$source_dir" ]]; then
-        echo "  skip  $dir/  (not found in repo)"
-        continue
+        echo "  skip  $label_prefix/  (not found in repo)"
+        return
     fi
 
-    target_dir="$CLAUDE_DIR/$dir"
-
-    # If the target is currently a whole-directory symlink (legacy install),
-    # back it up and replace with a real directory so we can merge into it.
     if [[ -L "$target_dir" ]]; then
         mkdir -p "$BACKUP_DIR"
-        mv "$target_dir" "$BACKUP_DIR/$dir"
-        echo "  bkp   $dir  → $BACKUP_DIR/$dir  (symlink -> merge-dir)"
+        mv "$target_dir" "$BACKUP_DIR/$(basename "$target_dir")"
+        echo "  bkp   $label_prefix  → $BACKUP_DIR/$(basename "$target_dir")  (symlink -> merge-dir)"
         mkdir -p "$target_dir"
     elif [[ ! -d "$target_dir" ]]; then
         mkdir -p "$target_dir"
     fi
 
-    # Symlink each entry in the repo dir individually.
     for entry in "$source_dir"/*; do
-        [[ -e "$entry" ]] || continue  # glob matched nothing
+        [[ -e "$entry" ]] || continue
         entry_name="$(basename "$entry")"
-        link_item "$source_dir/$entry_name" "$target_dir/$entry_name" "$dir/$entry_name"
+        link_item "$source_dir/$entry_name" "$target_dir/$entry_name" "$label_prefix/$entry_name"
     done
-done
+}
 
-echo ""
+# --- Claude ---
+if $INSTALL_CLAUDE; then
+    echo "==> Claude ($CLAUDE_DIR)"
+    mkdir -p "$CLAUDE_DIR"
+
+    for item in CLAUDE.md AGENTS.md agents commands contexts rules scripts notes; do
+        source="$REPO_DIR/$item"
+        [[ -e "$source" ]] || { echo "  skip  $item  (not in repo)"; continue; }
+        link_item "$source" "$CLAUDE_DIR/$item" "$item"
+    done
+
+    link_merge_dir "$REPO_DIR/skills" "$CLAUDE_DIR/skills" "skills"
+    echo ""
+fi
+
+# --- Cursor ---
+if $INSTALL_CURSOR; then
+    echo "==> Cursor ($CURSOR_DIR)"
+    mkdir -p "$CURSOR_DIR"
+    link_item "$REPO_DIR/.cursor/rules" "$CURSOR_DIR/rules" ".cursor/rules"
+    echo ""
+fi
+
+# --- Opencode ---
+if $INSTALL_OPENCODE; then
+    echo "==> Opencode ($OPENCODE_DIR)"
+    mkdir -p "$OPENCODE_DIR"
+    link_item "$REPO_DIR/AGENTS.md" "$OPENCODE_DIR/AGENTS.md" "AGENTS.md"
+    link_merge_dir "$REPO_DIR/rules" "$OPENCODE_DIR/rules" "rules"
+    echo ""
+fi
+
 echo "Done."
 [[ -d "$BACKUP_DIR" ]] && echo "Backups: $BACKUP_DIR"
 echo ""
-echo "Git workflow: cd $REPO_DIR  (not ~/.claude)"
+echo "Git workflow: cd $REPO_DIR  (never from the harness config dir)"

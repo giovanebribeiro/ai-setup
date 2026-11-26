@@ -1,0 +1,31 @@
+---
+description: Agent orchestration rules — when to use which agent and how to sequence them
+alwaysApply: true
+---
+
+# Agent Orchestration
+
+## Agent roster
+
+| Agent | When to use |
+|---|---|
+| manager | Decompose complex multi-step/multi-domain requests, dispatch to specialists. |
+| architect | System design, scalability, architectural trade-offs. Mandatory first step in any manager plan. |
+| code-reviewer | General code review for quality/security/maintainability. Use after any code change. |
+| security-reviewer | Vulnerability detection after code touching input, auth, endpoints, secrets. |
+| lang-reviewer | Language-specific review for Go, Java, Python, and Rust — auto-detects from changed files. |
+| build-resolver | Fix build/vet/lint/compilation failures — auto-detects from build files. |
+| doc-updater | Update docs/codemaps. Mandatory last step in any manager plan. |
+
+## Agent vs skill
+
+**Agent** = own context window, tool access, autonomy; does multi-step judgment.
+**Skill** = reference knowledge or fixed procedure loaded into caller's context; no autonomy.
+
+## Sequencing rules
+
+1. `architect` always runs first — never skipped.
+2. `build-resolver` runs before reviewers touching the same code.
+3. `lang-reviewer` and `code-reviewer` run in parallel when files don't conflict.
+4. `security-reviewer` is mandatory for any step touching auth, secrets, user input, or API endpoints.
+5. `doc-updater` always runs last.

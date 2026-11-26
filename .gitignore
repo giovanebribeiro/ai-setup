@@ -25,6 +25,8 @@ shell-snapshots/
 stats-cache.json
 tasks/
 
+notes/learned/private/
+
 # company-specific learned patterns (moved from skills/ to notes/ — not a skill)
 notes/learned/jira-epic-arc-pattern.md
 skills/github-actions-to-gitlab-ci/
